@@ -1,0 +1,11 @@
+{
+  "name": "Remix: Copy of SmartAcc - نظام الحسابات الذكي",
+  "description": "نظام محاسبي متكامل باللغة العربية لإدارة المبيعات اليومية، حسابات الموردين والعملاء، وتتبع الذمم الدائنة والمدينة مع إمكانية تصدير التقارير كملفات PDF والإرسال التلقائي عبر واتساب ورسائل SMS.",
+  "requestFramePermissions": [
+    "microphone",
+    "display-capture"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

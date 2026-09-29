@@ -1,0 +1,127 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ---------------------------------------------------------
+    // PHASE 0: Global Safety Net
+    // ---------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------
+    // PHASE 3: Primitive Definitions (Hardened Helpers)
+    // ---------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email != null && request.auth.token.email == 'guy48942@gmail.com') ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin')
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ---------------------------------------------------------
+    // PHASE 2: Validation Blueprints (The "Anti-Update-Gap")
+    // ---------------------------------------------------------
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'lastSeen', 'isPro', 'role']) &&
+             data.keys().size() >= 6 && data.keys().size() <= 12 &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.lastSeen is string && data.lastSeen.size() <= 50 &&
+             data.isPro is bool &&
+             data.role in ['Admin', 'Accountant', 'Salesperson'];
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll(['id', 'timestamp', 'username', 'actionType', 'entityType', 'entityId', 'details']) &&
+             data.keys().size() >= 7 && data.keys().size() <= 15 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.timestamp is string && data.timestamp.size() <= 50 &&
+             data.username is string && data.username.size() <= 100 &&
+             data.actionType in ['add', 'edit', 'delete', 'restore'] &&
+             data.entityType is string && data.entityType.size() <= 50 &&
+             data.entityId is string && data.entityId.size() <= 128 &&
+             data.details is string && data.details.size() <= 1000;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll(['text', 'type', 'active']) &&
+             data.keys().size() >= 3 && data.keys().size() <= 6 &&
+             data.text is string && data.text.size() <= 2000 &&
+             data.type in ['info', 'warning', 'error'] &&
+             data.active is bool;
+    }
+
+    // ---------------------------------------------------------
+    // PHASE 4: Drafting the "Fortress" Rules
+    // ---------------------------------------------------------
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && isValidUserProfile(incoming()) && 
+                    incoming().role == 'Salesperson' && 
+                    incoming().isPro == false;
+      
+      allow update: if (
+        isAdmin() && isValidUserProfile(incoming())
+      ) || (
+        isOwner(userId) && isValidUserProfile(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'lastSeen', 'voiceOption', 'speechRate', 'voicePitch', 'voiceVolume', 'voiceDialect'])
+      );
+    }
+
+    // Activity Logs
+    match /activity_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && isValidActivityLog(incoming());
+      allow update, delete: if isAdmin();
+    }
+
+    // User Databases (Private Data)
+    match /user_databases/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if false;
+      
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+    }
+
+    // User Backups
+    match /user_backups/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow create, update: if isOwner(userId) || isAdmin();
+
+      match /backups_store/{backupId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Settings / Announcements
+    match /settings/announcement {
+      allow read: if true;
+      allow write: if isAdmin() && isValidAnnouncement(incoming());
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and subscription data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique identifier for the user" },
+        "email": { "type": "string", "description": "The user's email address" },
+        "displayName": { "type": "string", "description": "The user's display name" },
+        "photoURL": { "type": "string", "description": "URL to the user's profile photo" },
+        "lastSeen": { "type": "string", "format": "date-time", "description": "ISO timestamp of the user's last activity" },
+        "isPro": { "type": "boolean", "description": "Whether the user has a Pro subscription" },
+        "role": { "type": "string", "enum": ["Admin", "Accountant", "Salesperson"], "description": "The user's role in the system" }
+      },
+      "required": ["uid", "email", "displayName", "lastSeen", "isPro", "role"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Log entry for user actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the log entry" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "ISO timestamp of the action" },
+        "username": { "type": "string", "description": "Name of the user who performed the action" },
+        "userId": { "type": "string", "description": "UID of the user who performed the action" },
+        "userEmail": { "type": "string", "description": "Email of the user who performed the action" },
+        "actionType": { "type": "string", "enum": ["add", "edit", "delete", "restore"], "description": "Type of action performed" },
+        "entityType": { "type": "string", "description": "Type of entity affected by the action" },
+        "entityId": { "type": "string", "description": "ID of the entity affected" },
+        "details": { "type": "string", "description": "Textual description of the action" }
+      },
+      "required": ["id", "timestamp", "username", "actionType", "entityType", "entityId", "details"]
+    },
+    "UserDatabase": {
+      "title": "UserDatabase",
+      "description": "The user's full application database state",
+      "type": "object",
+      "properties": {
+        "dbState": { "type": "object", "description": "Serialized database state" },
+        "lastUpdated": { "type": "string", "format": "date-time", "description": "ISO timestamp of last sync" },
+        "updatedBy": { "type": "string", "description": "Identifier of the client that updated the data" }
+      },
+      "required": ["dbState", "lastUpdated"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Global system announcement",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "Announcement text" },
+        "type": { "type": "string", "enum": ["info", "warning", "error"], "description": "Visual type of the announcement" },
+        "active": { "type": "boolean", "description": "Whether the announcement is currently displayed" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp of last update" }
+      },
+      "required": ["text", "type", "active"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles and roles"
+    },
+    "/activity_logs/{logId}": {
+      "schema": "ActivityLog",
+      "description": "Global audit logs of user activity"
+    },
+    "/user_databases/{userId}": {
+      "schema": "UserDatabase",
+      "description": "Per-user application data storage"
+    },
+    "/settings/announcement": {
+      "schema": "Announcement",
+      "description": "Global settings including announcements"
+    }
+  }
+}

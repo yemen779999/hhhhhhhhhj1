@@ -1,0 +1,101 @@
+  const stopLiveSession = () => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    if (mediaStreamSourceRef.current) {
+      mediaStreamSourceRef.current.disconnect();
+      mediaStreamSourceRef.current = null;
+    }
+    if (inputAudioCtxRef.current) {
+      inputAudioCtxRef.current.close();
+      inputAudioCtxRef.current = null;
+    }
+    if (outputAudioCtxRef.current) {
+      outputAudioCtxRef.current.close();
+      outputAudioCtxRef.current = null;
+    }
+  };
+
+  const startLiveSession = async () => {
+    if (wsRef.current) return;
+    try {
+      setAudioError(null);
+      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${wsProtocol}//${window.location.host}/live`);
+      wsRef.current = ws;
+
+      const inputAudioCtx = new AudioContext({ sampleRate: 16000 });
+      const outputAudioCtx = new AudioContext({ sampleRate: 24000 });
+      inputAudioCtxRef.current = inputAudioCtx;
+      outputAudioCtxRef.current = outputAudioCtx;
+      playChunkRef.current = createAudioChunkPlayer();
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const source = inputAudioCtx.createMediaStreamSource(stream);
+      mediaStreamSourceRef.current = source;
+      const processor = inputAudioCtx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+      source.connect(processor);
+      processor.connect(inputAudioCtx.destination);
+
+      processor.onaudioprocess = (e) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const base64 = pcmToBase64(e.inputBuffer.getChannelData(0));
+          ws.send(JSON.stringify({ audio: base64 }));
+        }
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.audio) {
+           playChunkRef.current(outputAudioCtx, msg.audio);
+           setAssistantStatusState("speaking");
+        }
+        if (msg.interrupted) {
+           // model was interrupted
+        }
+        if (msg.toolCall) {
+           const { functionCalls } = msg.toolCall;
+           if (functionCalls && functionCalls.length > 0) {
+             const call = functionCalls[0];
+             if (call.name === "execute_action") {
+               const args = call.args || {};
+               if (args.navigateTab) setActiveTab(args.navigateTab);
+               if (args.selectedAccountId) setSelectedAccountId(args.selectedAccountId);
+               
+               // send tool response
+               ws.send(JSON.stringify({
+                 toolResponse: {
+                   functionResponses: [
+                     {
+                       id: call.id,
+                       name: call.name,
+                       response: { result: "Action executed successfully on the UI" }
+                     }
+                   ]
+                 }
+               }));
+             }
+           }
+        }
+      };
+
+      ws.onclose = () => {
+         stopLiveSession();
+      };
+      
+      ws.onopen = () => {
+         setListeningState(true);
+         setAssistantStatusState("listening");
+      };
+    } catch (err) {
+      console.error("Live session error", err);
+      setAudioError("تعذر بدء الاتصال المباشر. يرجى التحقق من الميكروفون.");
+      stopLiveSession();
+    }
+  };
